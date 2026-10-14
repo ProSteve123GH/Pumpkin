@@ -180,7 +180,7 @@ jobs:
           cargo test --doc --verbose
 
   test_android:
-    name: Test on Android AArch64
+    name: Test on Android (${{ matrix.name }})
     needs: [prepare, format, machete, clippy, check_wit]
     if: >-
       !cancelled() &&
@@ -190,18 +190,28 @@ jobs:
       needs.clippy.result == 'success' &&
       (needs.check_wit.result == 'success' || needs.check_wit.result == 'skipped')
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: AArch64
+            rust-target: aarch64-linux-android
+            ndk-target: arm64-v8a
+          - name: ARMv7
+            rust-target: armv7-linux-androideabi
+            ndk-target: armeabi-v7a
     steps:
       - uses: actions/checkout@v7
         with:
           submodules: recursive
       - run: rustup update ${{ env.CI_RUST_TOOLCHAIN_VER }} && rustup default ${{ env.CI_RUST_TOOLCHAIN_VER }}
-      - run: rustup target add aarch64-linux-android
+      - run: rustup target add ${{ matrix.rust-target }}
       - uses: nttld/setup-ndk@v1
         with:
           ndk-version: r27c
       - uses: Swatinem/rust-cache@v2
         with:
-          shared-key: android-debug-${{ runner.os }}-${{ runner.arch }}
+          shared-key: android-debug-${{ matrix.ndk-target }}-${{ runner.os }}-${{ runner.arch }}
       - run: cargo install cargo-ndk
       - name: Enable KVM
         run: |
@@ -219,7 +229,7 @@ jobs:
           profile: pixel_5
           force-avd-creation: false
           emulator-options: -no-snapshot-load -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -camera-front none
-          script: cargo ndk-test -t arm64-v8a
+          script: cargo ndk-test -t ${{ matrix.ndk-target }}
 
   build_pull_request:
     name: Build affected packages
@@ -263,7 +273,7 @@ jobs:
           cargo build --verbose
 
   build_android_pull_request:
-    name: Build affected packages for Android AArch64
+    name: Build affected packages for Android (${{ matrix.name }})
     needs: [prepare, test, test_android]
     if: >-
       !cancelled() &&
@@ -273,6 +283,16 @@ jobs:
       (needs.test_android.result == 'success' ||
       needs.test_android.result == 'skipped')
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: AArch64
+            rust-target: aarch64-linux-android
+            ndk-target: arm64-v8a
+          - name: ARMv7
+            rust-target: armv7-linux-androideabi
+            ndk-target: armeabi-v7a
     env:
       CI_AFFECTED_PACKAGES: ${{ needs.prepare.outputs.affected_packages }}
     steps:
@@ -283,20 +303,20 @@ jobs:
         with:
           python-version: "3.x"
       - run: rustup update ${{ env.CI_RUST_TOOLCHAIN_VER }} && rustup default ${{ env.CI_RUST_TOOLCHAIN_VER }}
-      - run: rustup target add aarch64-linux-android
+      - run: rustup target add ${{ matrix.rust-target }}
       - uses: nttld/setup-ndk@v1
         with:
           ndk-version: r27c
       - uses: Swatinem/rust-cache@v2
         with:
-          shared-key: android-debug-${{ runner.os }}-${{ runner.arch }}
+          shared-key: android-debug-${{ matrix.ndk-target }}-${{ runner.os }}-${{ runner.arch }}
       - run: cargo install cargo-ndk
       - name: Build affected packages
         env:
           CARGO_NDK_PLATFORM: 24
         run: >-
           python .github/scripts/ci_packages.py run --
-          cargo ndk -t arm64-v8a build --locked
+          cargo ndk -t ${{ matrix.ndk-target }} build --locked
 
   build_release:
     name: Build project in release
@@ -393,10 +413,22 @@ jobs:
           path: dist/${{ matrix.asset }}
 
   build_android_release:
-    name: Build project in release for Android AArch64
+    name: Build project in release for Android (${{ matrix.name }})
     needs: [prepare, clippy_release, test, test_android]
     if: needs.prepare.outputs.run_full == 'true' && github.event_name != 'pull_request'
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: AArch64
+            rust-target: aarch64-linux-android
+            ndk-target: arm64-v8a
+            asset: pumpkin-aarch64-android
+          - name: ARMv7
+            rust-target: armv7-linux-androideabi
+            ndk-target: armeabi-v7a
+            asset: pumpkin-armv7-android
     env:
       CARGO_PROFILE_RELEASE_LTO: ${{ inputs.release_lto || 'off' }}
       CARGO_PROFILE_RELEASE_CODEGEN_UNITS: ${{ inputs.release_codegen_units || '16' }}
@@ -405,25 +437,27 @@ jobs:
         with:
           submodules: recursive
       - run: rustup update ${{ env.CI_RUST_TOOLCHAIN_VER }} && rustup default ${{ env.CI_RUST_TOOLCHAIN_VER }}
-      - run: rustup target add aarch64-linux-android
+      - run: rustup target add ${{ matrix.rust-target }}
       - uses: nttld/setup-ndk@v1
         with:
           ndk-version: r27c
       - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: android-release-${{ matrix.ndk-target }}-${{ runner.os }}-${{ runner.arch }}
       - run: cargo install cargo-ndk
       - name: Build release with cargo ndk
         env:
           CARGO_NDK_PLATFORM: 24
-        run: cargo ndk -t arm64-v8a build --release --locked
+        run: cargo ndk -t ${{ matrix.ndk-target }} build --release --locked
       - name: Prepare artifact
         run: |
           mkdir -p dist
-          cp target/aarch64-linux-android/release/pumpkin dist/pumpkin-aarch64-android
+          cp target/${{ matrix.rust-target }}/release/pumpkin dist/${{ matrix.asset }}
       - uses: actions/upload-artifact@v7
         with:
-          name: pumpkin-aarch64-android
+          name: ${{ matrix.asset }}
           compression-level: 9
-          path: dist/pumpkin-aarch64-android
+          path: dist/${{ matrix.asset }}
 
   draft_canary_release:
     name: Update canary release

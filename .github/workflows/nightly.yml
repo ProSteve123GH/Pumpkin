@@ -90,37 +90,49 @@ jobs:
           path: dist/${{ matrix.asset }}
 
   build_android:
-    name: Build pumpkin-aarch64-android
+    name: Build ${{ matrix.asset }}
     needs: check
     if: needs.check.outputs.changed == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 240
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: AArch64
+            rust-target: aarch64-linux-android
+            ndk-target: arm64-v8a
+            asset: pumpkin-aarch64-android
+          - name: ARMv7
+            rust-target: armv7-linux-androideabi
+            ndk-target: armeabi-v7a
+            asset: pumpkin-armv7-android
     steps:
       - uses: actions/checkout@v7
         with:
           submodules: recursive
       - run: rustup update stable && rustup default stable
-      - run: rustup target add aarch64-linux-android
+      - run: rustup target add ${{ matrix.rust-target }}
       - uses: nttld/setup-ndk@v1
         with:
           ndk-version: r27c
       - uses: Swatinem/rust-cache@v2
         with:
-          key: android
+          key: android-${{ matrix.ndk-target }}
       - run: cargo install cargo-ndk
       - name: Build release with cargo ndk
         env:
           CARGO_NDK_PLATFORM: 24
-        run: cargo ndk -t arm64-v8a build --release --locked
+        run: cargo ndk -t ${{ matrix.ndk-target }} build --release --locked
       - name: Prepare artifact
         run: |
           mkdir -p dist
-          cp target/aarch64-linux-android/release/pumpkin dist/pumpkin-aarch64-android
+          cp target/${{ matrix.rust-target }}/release/pumpkin dist/${{ matrix.asset }}
       - uses: actions/upload-artifact@v7
         with:
-          name: pumpkin-aarch64-android
+          name: ${{ matrix.asset }}
           compression-level: 9
-          path: dist/pumpkin-aarch64-android
+          path: dist/${{ matrix.asset }}
 
   draft_release:
     name: Draft nightly release

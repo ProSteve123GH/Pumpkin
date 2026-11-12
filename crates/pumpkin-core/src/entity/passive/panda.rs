@@ -282,13 +282,11 @@ impl Mob for PandaEntity {
     }
 
     fn mob_write_nbt(&self, nbt: &mut NbtCompound) {
-        self.write_ageable_nbt(nbt);
         nbt.put_string("MainGene", self.get_main_gene().as_str().to_string());
         nbt.put_string("HiddenGene", self.get_hidden_gene().as_str().to_string());
     }
 
     fn mob_read_nbt(&self, nbt: &NbtCompound) {
-        self.read_ageable_nbt(nbt);
         if let Some(main) = nbt.get_string("MainGene") {
             self.set_main_gene(PandaGene::from_name(main));
         }
@@ -334,6 +332,6 @@ impl Mob for PandaEntity {
     }
 
     fn mob_interact(&self, player: &Arc<Player>, item_stack: &mut ItemStack) -> bool {
-        self.animal_interact(player, item_stack, Sound::EntityPandaAmbient)
+        self.animal_interact(player, item_stack)
     }
 }
